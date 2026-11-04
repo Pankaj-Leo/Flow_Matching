@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow Matching for World Models</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --ink: #1c1915;
+  --muted: #5c564c;
+  --line: #e4ddd2;
+  --paper: #faf7f2;
+  --card: #fff;
+  --accent: #9a3412;
+  --code: #f3eee6;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Source Serif 4", Georgia, serif;
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+main {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 5rem;
+  background: var(--card);
+  min-height: 100vh;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+h1, h2, h3, h4 {
+  font-family: "IBM Plex Sans Condensed", "Avenir Next Condensed", sans-serif;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+h1 { font-size: 2.15rem; margin: 0 0 0.6rem; }
+h2 { font-size: 1.55rem; margin: 2.4rem 0 0.7rem; padding-top: 0.4rem; border-top: 1px solid var(--line); }
+h3 { font-size: 1.2rem; margin: 1.6rem 0 0.4rem; }
+p { margin: 0.7rem 0; }
+a { color: var(--accent); }
+strong { font-weight: 600; }
+.table-wrap { overflow-x: auto; margin: 1rem 0; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { border: 1px solid var(--line); padding: 0.4rem 0.55rem; vertical-align: top; text-align: left; }
+th { background: #f6f1ea; font-family: "IBM Plex Sans Condensed", sans-serif; font-weight: 600; }
+code, pre {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+code { background: var(--code); padding: 0.08em 0.28em; border-radius: 3px; }
+pre { background: #241f1a; color: #f6f1ea; padding: 0.9rem 1rem; overflow-x: auto; border-radius: 6px; }
+pre code { background: transparent; color: inherit; padding: 0; }
+img { max-width: 100%; height: auto; }
+blockquote { margin: 1rem 0; padding: 0.2rem 0 0.2rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+ul, ol { padding-left: 1.3rem; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 2rem 0; }
+.mjx-chtml { font-size: 105% !important; }
+
+.widget{margin:1.4rem 0;padding:1rem;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
+.widget figcaption{font-size:.92rem;color:var(--muted);margin-bottom:.6rem}
+.widget svg{width:100%;height:auto;display:block;background:var(--card);border-radius:6px}
+.wctl{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:.95rem;margin-bottom:.6rem}
+.wctl button{font:inherit;padding:.25rem .7rem;border:1px solid var(--line);border-radius:999px;background:var(--card);cursor:pointer}
+.wctl button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.mono{font-family:"JetBrains Mono",monospace;font-size:.85rem}
+.roles-row{display:flex;flex-wrap:wrap;gap:4px;margin:.4rem 0}
+.chip{display:inline-block;padding:.15rem .45rem;border-radius:4px;font-family:"JetBrains Mono",monospace;font-size:.8rem;border:1px solid transparent}
+.chip.clean{background:#dcfce7;color:#14532d;border-color:#86efac}
+.chip.noisy{background:#ede9fe;color:#4c1d95;border-color:#c4b5fd}
+.chip.dropped{background:#f3f4f6;color:#6b7280;border-color:#d1d5db;text-decoration:line-through}
+.widget .legend,.widget .note{font-size:.9rem;margin:.4rem 0}
+blockquote .attr{display:inline-block;margin-top:.3rem;font-size:.9rem;color:var(--muted);font-style:normal}
+</style>
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['\\(', '\\)']],
+    displayMath: [['\\[', '\\]']],
+    processEscapes: false
+  },
+  options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+};
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-chtml.js"></script>
+</head>
+<body>
+<main>
+<p>Contents</p>
+<ol>
+<li><a href="#start">Start here</a></li>
+<li>Part I · Flow matching</li>
+<li><a href="#transport">1 · Generation as transport</a></li>
+<li><a href="#cfm">2 · Conditional flow matching</a></li>
+<li><a href="#why">3 · Why regression works</a></li>
+<li><a href="#paths">4 · Paths and parameterisations</a></li>
+<li><a href="#sampling">5 · Sampling and the one-step trap</a></li>
+<li><a href="#straight">6 · Straightening and distillation</a></li>
+<li><a href="#knobs">7 · Training knobs at scale</a></li>
+<li><a href="#beyond">8 · Beyond pixels</a></li>
+<li><a href="#conventions">9 · Conventions cheat sheet</a></li>
+<li>Part II · World models</li>
+<li><a href="#worldmodel">10 · What a world model is</a></li>
+<li><a href="#cosmos">11 · The Cosmos stack</a></li>
+<li><a href="#conditioning">12 · Conditioning a world model</a></li>
+<li><a href="#roles">13 · One model, many jobs</a></li>
+<li><a href="#using">14 · Using and judging world models</a></li>
+<li>Part III · Run it</li>
+<li><a href="#reproduce">15 · Reproduce the numbers</a></li>
+<li><a href="#lessons">16 · Takeaways and checklist</a></li>
+<li><a href="#refs">References · glossary</a></li>
+</ol>
+<p>A technical guide · theory, systems, code</p>
+<h1 id="start">Flow Matching for World Models</h1>
+<p>How a velocity field learned by plain regression becomes a simulator, an action labeller and a policy — from the continuity equation to NVIDIA's Cosmos stack. Part II summarises published NVIDIA, GR00T and π0 work; no world model was trained for this project. Every measured number comes from a script in the repository (section 15).</p>
+<p><strong>Reading time</strong> ≈ 45 min <strong>Prerequisites</strong> probability, PyTorch, a little calculus <strong>Code</strong> <a href="https://github.com/Pankaj-Leo/Flow_Matching">github.com/Pankaj-Leo/Flow_Matching</a></p>
+<p>Contents</p>
+<ol>
+<li><a href="#transport">Part I · Flow matching (sections 1–9)</a></li>
+<li><a href="#worldmodel">Part II · World models (10–14)</a></li>
+<li><a href="#reproduce">Part III · Run it (15–16)</a></li>
+<li><a href="#refs">References and glossary</a></li>
+</ol>
+<h3 id="what-you-will-be-able-to-do">What you will be able to do</h3>
+<ul>
+<li>Derive the conditional flow matching loss and explain why regressing on <em>conflicting</em> straight-line labels learns the right marginal velocity field.</li>
+<li>Move between velocity, data and noise parameterisations, between flow matching and diffusion (EDM), and between the opposite time conventions used by Meta, Cosmos, π0 and GR00T without sign errors.</li>
+<li>Explain why one sampling step of an undistilled model returns the conditional mean — the same answer an MSE regressor gives — and what reflow and distillation do about it.</li>
+<li>Read a frontier world-model stack (Cosmos-Predict2.5, Cosmos 3) and know what each knob does: logit-normal time, resolution shift, guidance, frame conditioning, action injection, token roles, 4-step distillation.</li>
+<li>Build the whole workflow yourself: curate, pre-train, post-train, critique, distil, evaluate policies and generate synthetic trajectories — with measured results and the failures that taught the most.</li>
+</ul>
+<p>Notation used throughout</p>
+<p>Unless a section says otherwise, this guide uses the convention of Meta's <code>flow_matching</code> library: <strong>\(t=0\) is noise, \(t=1\) is data</strong>, \(x_t = t\,x_1 + (1-t)\,x_0\) with \(x_0\sim\mathcal N(0,I)\), and the regression target is \(x_1 - x_0\). Cosmos, Stable Diffusion 3 and openpi use the reverse; section 9 has the conversion table. NFE means "number of function evaluations", one forward pass of the network.</p>
+<p>Part I</p>
+<h2 id="flow-matching-from-first-principles">Flow matching from first principles</h2>
+<p>Nine sections that take you from "a density that moves" to the training and sampling knobs used in production video models.</p>
+<h2 id="transport">1 · Generation as transport</h2>
+<p>An image with \(d\) pixels is a point in \(\mathbb R^d\). Real images occupy a thin, complicated region of that space; call its density \(p_{\text{data}}\). We only ever see samples from it. Generative adversarial networks tried to learn a map to that density in one shot. Diffusion and flow models instead build it gradually: start from a simple density \(p_0\), usually \(\mathcal N(0, I)\), and move it, along a fictitious time \(t\in[0,1]\), until it becomes \(p_1\approx p_{\text{data}}\).</p>
+<p>Probability mass is conserved while it moves, so the evolution of the density \(p_t\) and the velocity field \(u_t\) that moves it are tied by the <strong>continuity equation</strong> of fluid dynamics (Euler, 1757):</p>
+<p>\[ \partial_t\, p_t(x) + \nabla\!\cdot\!\big(p_t(x)\,u_t(x)\big) = 0 . \]</p>
+<p>Microscopically, each sample follows an ordinary differential equation, \(\dot x_t = u_t(x_t)\). Macroscopically, a whole cloud of samples drawn from \(p_0\) and pushed along that ODE is distributed as \(p_t\) at every time. If we knew \(u_t\), generating data would be easy: draw noise and integrate. <strong>Flow matching trains a network \(v_\theta(x,t)\approx u_t(x)\).</strong></p>
+<p>This idea is older than flow matching. Continuous normalizing flows (2018) used exactly this ODE, but trained it by maximum likelihood: every training step integrated the ODE backwards from a data point and accumulated the divergence of the field (the instantaneous change-of-variables formula \(\tfrac{d}{dt}\log p_t(x_t) = -\nabla\!\cdot u_t(x_t)\)). That made each step cost dozens of network evaluations, and CNFs never scaled. Flow matching (Lipman et al., 2023) and rectified flow (Liu et al., 2022) found a <em>simulation-free</em> objective: one network evaluation per training example.</p>
+<h2 id="cfm">2 · Conditional flow matching</h2>
+<p>We cannot write down \(u_t\) for the whole data distribution. But we can write down a velocity field that transports noise to <em>a single</em> data point \(x_1\). The simplest one moves every noise sample in a straight line at constant speed:</p>
+<p>\[ x_t = t\,x_1 + (1-t)\,x_0, \qquad \frac{dx_t}{dt} = x_1 - x_0 . \]</p>
+<p>This is not an arbitrary choice. Between two Gaussians the optimal-transport map is affine, and the optimal way to deform one Gaussian into another is to interpolate linearly between each point and its image (McCann's displacement interpolation, 1997). Shrinking the target Gaussian around \(x_1\) to zero width gives the straight line above. That is why this path is called <strong>CondOT</strong> (conditional optimal transport).</p>
+<p>The training objective is then plain regression onto the constant velocity of the straight line:</p>
+<p>\[ \mathcal L_{\text{CFM}}(\theta) = \mathbb E_{t,\;x_0\sim p_0,\;x_1\sim p_{\text{data}}}\Big\| v_\theta(x_t, t) - (x_1 - x_0) \Big\|^2 . \]</p>
+<p>Algorithm 1 · one training step of conditional flow matching</p>
+<ol>
+<li>Sample a data point \(x_1\) and a noise point \(x_0\sim\mathcal N(0,I)\), independently.</li>
+<li>Sample a time \(t\) (uniform, or a better distribution — section 7).</li>
+<li>Form the point on the straight line, \(x_t = t\,x_1 + (1-t)\,x_0\).</li>
+<li>Predict \(v_\theta(x_t,t)\) and regress it onto \(x_1-x_0\) with mean squared error.</li>
+<li>Take a gradient step.</li>
+</ol>
+<p>With Meta's library the whole loop is a dozen lines:</p>
+<pre><code># pip install flow_matching   (Meta, CC BY-NC 4.0)
+import torch
+from flow_matching.path import CondOTProbPath
+from flow_matching.solver import ODESolver
+
+path = CondOTProbPath()              # x_t = t*x1 + (1-t)*x0, target dx_t = x1 - x0
+opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+for step in range(8000):
+    x1 = sample_data(2048)
+    x0 = torch.randn_like(x1)
+    s = path.sample(x_0=x0, x_1=x1, t=torch.rand(x1.shape[0]))
+    loss = (model(s.x_t, s.t) - s.dx_t).pow(2).mean()
+    opt.zero_grad(); loss.backward(); opt.step()
+
+samples = ODESolver(velocity_model=model).sample(
+    x_init=torch.randn(5000, 2), step_size=1 / 32, method=&quot;euler&quot;)
+</code></pre>
+<p>The algorithm looks naive. The noise and data points are paired at random, the label is constant in time although the field we want clearly is not, and the true flow is curved although every training path is straight. The next section shows why none of that is a problem.</p>
+<h2 id="why">3 · Why regression on conflicting labels works</h2>
+<p>Two training examples can produce the same input \((x_t, t)\) with different labels: two straight lines that cross. The model cannot satisfy both. Mean squared error resolves the conflict in a precise way: for each input it learns the <em>conditional expectation</em> of the label.</p>
+<p>\[ v^\star(x,t) = \arg\min_v\, \mathbb E\big[\|v - (x_1-x_0)\|^2 \,\big|\, x_t = x\big] = \mathbb E\big[x_1 - x_0 \,\big|\, x_t = x\big]. \]</p>
+<p>That average, weighted by how likely each destination is given that a particle passes through \(x\) at time \(t\), is exactly the <strong>marginal velocity field</strong> that transports \(p_0\) to \(p_1\):</p>
+<p>\[ u_t(x) = \int u_t(x\mid x_1)\,\frac{p_t(x\mid x_1)\,p_{\text{data}}(x_1)}{p_t(x)}\,dx_1, \qquad u_t(x\mid x_1) = \frac{x_1 - x}{1-t}. \]</p>
+<p>Equivalently, the conditional loss and the intractable "marginal" loss \(\mathbb E\|v_\theta - u_t\|^2\) differ by a constant that does not depend on \(\theta\), so they have the same gradients. The conflicting labels are the mechanism, not a nuisance.</p>
+<p>Two consequences follow. First, the time dependence is real even though each label is constant: the conditional field \((x_1-x)/(1-t)\) points in a fixed direction but grows as time runs out, and a particle on its straight path simply keeps pace. Second, the learned trajectories are <strong>curved</strong>. Where training paths overlap, the average deflects them; and because an ODE has unique solutions, learned trajectories can never cross. They re-pair noise and data differently from any single training example.</p>
+<p>Measured on two moons in this repository (<code>scripts/check_readme_claims.py</code>): straightness is 0.314 for the learned flow and 0.0001 after one round of reflow (section 6).</p>
+<p>Key idea</p>
+<p>For a data distribution made of a few points \(\mu_i\) with weights \(\pi_i\), the marginal velocity has a closed form: \(v(x,t) = \sum_i w_i(x,t)\,(\mu_i - x)/(1-t)\) with posterior weights \(w_i \propto \pi_i\,\mathcal N(x;\, t\mu_i,\,(1-t)^2)\). The interactive figure in section 5 integrates exactly this field.</p>
+<h2 id="paths">4 · Paths, parameterisations, and the link to diffusion</h2>
+<p>The straight line is one member of the family of <strong>affine Gaussian paths</strong>, \(x_t = \alpha_t x_1 + \sigma_t x_0\), whose conditional velocity is \(\dot\alpha_t x_1 + \dot\sigma_t x_0\). Meta's library implements these as schedulers:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Scheduler</th>
+<th>\(\alpha_t\)</th>
+<th>\(\sigma_t\)</th>
+<th>Where it comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CondOTScheduler</code></td>
+<td>\(t\)</td>
+<td>\(1-t\)</td>
+<td>flow matching / rectified flow; Cosmos-Predict2.5 and Cosmos 3</td>
+</tr>
+<tr>
+<td><code>VPScheduler</code></td>
+<td>\(e^{-T(t)/2}\)</td>
+<td>\(\sqrt{1-e^{-T(t)}}\)</td>
+<td>the probability-flow ODE of DDPM / VP-SDE</td>
+</tr>
+<tr>
+<td><code>CosineScheduler</code></td>
+<td>\(\sin\tfrac{\pi t}{2}\)</td>
+<td>\(\cos\tfrac{\pi t}{2}\)</td>
+<td>cosine schedules</td>
+</tr>
+<tr>
+<td><code>LinearVPScheduler</code></td>
+<td>\(t\)</td>
+<td>\(\sqrt{1-t^2}\)</td>
+<td>variance-preserving linear</td>
+</tr>
+<tr>
+<td><code>PolynomialConvexScheduler(n)</code></td>
+<td>\(t^n\)</td>
+<td>\(1-t^n\)</td>
+<td>discrete mixture paths (section 8)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="velocity-data-and-noise-predictions-are-interchangeable">Velocity, data and noise predictions are interchangeable</h3>
+<p>Along an affine path, the network can predict the velocity \(u\), the clean data \(\hat x_1\) (x-prediction), or the noise \(\hat\varepsilon\). Each is a linear function of the others and of \(x_t\), so the sampler can always recover a velocity:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Have</th>
+<th>Get</th>
+<th>Formula (affine path)</th>
+<th>CondOT special case</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>\(\hat x_1\)</td>
+<td>velocity</td>
+<td>\(u = \frac{\dot\sigma_t}{\sigma_t}x_t + \frac{\dot\alpha_t\sigma_t-\dot\sigma_t\alpha_t}{\sigma_t}\hat x_1\)</td>
+<td>\(u = (\hat x_1 - x_t)/(1-t)\)</td>
+</tr>
+<tr>
+<td>\(\hat\varepsilon\)</td>
+<td>velocity</td>
+<td>\(u = \frac{\dot\alpha_t}{\alpha_t}x_t + \frac{\dot\sigma_t\alpha_t-\dot\alpha_t\sigma_t}{\alpha_t}\hat\varepsilon\)</td>
+<td>\(u = (x_t - \hat\varepsilon)/t\)</td>
+</tr>
+<tr>
+<td>\(u\)</td>
+<td>\(\hat x_1\)</td>
+<td>\(\hat x_1 = \frac{\sigma_t u - \dot\sigma_t x_t}{\dot\alpha_t\sigma_t - \dot\sigma_t\alpha_t}\)</td>
+<td>\(\hat x_1 = x_t + (1-t)u\)</td>
+</tr>
+<tr>
+<td>\(\hat\varepsilon\)</td>
+<td>score</td>
+<td>\(\nabla\log p_t(x) = -\hat\varepsilon/\sigma_t\)</td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p>AlphaFlow predicts clean protein structures. In the paper, time runs from a harmonic prior at \(t=0\) to the structure at \(t=1\), and the step is \((\hat x-x_t)/(1-t)\). The public code reverses that clock and steps with \((x_t-\hat x)/t\). Cosmos predicts velocity. After the clock is aligned, the ODE is the same.</p>
+<h3 id="flow-matching-and-diffusion-are-one-family">Flow matching and diffusion are one family</h3>
+<p>With Gaussian paths, flow matching and diffusion share the same marginal densities up to a re-parameterisation of time (Meta's <code>ScheduleTransformedModel</code> converts a trained model to a different scheduler without retraining). They differ in four engineering choices: the network's output (velocity, noise or EDM's preconditioned denoiser), the loss weighting over time, the distribution of training times, and the sampler. The mapping to EDM's noise level is exact: in Meta time \(\sigma_{\text{EDM}} = (1-t)/t\), so \(t = 1/(1+\sigma)\).</p>
+<p>From the source</p>
+<p>Cosmos-Predict2.5 (p. 8): "We adopt flow matching (FM)… While FM and the Elucidated Diffusion Model (EDM)…, which was used in [Cosmos-Predict1]…, are mathematically equivalent in terms of their forward and backward diffusion processes, they differ in how the denoising network is parameterized… FM selects coefficients that make the denoising network predict the velocity of the diffusion trajectory."</p>
+<h2 id="sampling">5 · Sampling, and the one-step trap</h2>
+<p>Sampling integrates the learned ODE from noise at \(t=0\) to data at \(t=1\). Euler's method takes \(x_{t+h} = x_t + h\,v_\theta(x_t,t)\), one network evaluation per step; midpoint and Heun use two per step, RK4 four; multistep solvers such as UniPC (used by Cosmos 3) reuse past evaluations. The number of steps you need depends on how curved the learned trajectories are.</p>
+<p>Now look at the very first step. With independent noise–data pairs, \(x_0\) carries no information about \(x_1\), so at \(t=0\) the learned velocity is \(v^\star(x_0,0) = \mathbb E[x_1] - x_0\). With a conditioning signal \(c\) (an action, a caption) the same holds conditionally:</p>
+<p>\[ x_0 + 1\cdot v^\star(x_0, 0\mid c) = \mathbb E[x_1\mid c]. \]</p>
+<p><strong>A single Euler step returns the conditional mean</strong> — precisely what a model trained with MSE regression predicts. For a world model that is a blurry average of possible futures, often a physically impossible one. The widget below integrates the exact marginal field for three data points; move the step count and watch the samples collapse onto the mean at one step and split into the three modes as the steps increase.</p>
+<figure class="widget" id="w-trap"><figcaption><strong>The one-step trap, live.</strong> Exact marginal velocity for data at −3, 0.5 and 3 (weights 0.45, 0.20, 0.35); 160 noise samples integrated with Euler from \(t=0\) (bottom) to \(t=1\) (top). Violet: Euler paths at the chosen step count, with a histogram of where they land. Grey: the exact ODE paths. Amber: the data points.</figcaption>
+<div class="wctl"><label>Euler steps <input type="range" id="trap-n" min="0" max="7" value="0"> <output id="trap-out">1</output></label> <label><input type="checkbox" id="trap-pairs"> show training pairs</label></div>
+<svg id="trap-svg" viewBox="0 0 640 360" role="img" aria-label="Euler sample paths from noise to data"></svg></figure>
+<p>Measured on two moons: at one Euler step, vanilla flow matching is 13× further from the data than at 64 steps (sliced \(W_2\) 0.626 vs 0.049); after one reflow, one step is already as good as 64.</p>
+<h2 id="straight">6 · Straightening, and distillation</h2>
+<p>Curvature comes from crossings, and crossings come from pairing noise and data independently. <strong>Rectified flow</strong> (Liu et al., 2022) lets the trained model choose the pairs: draw \(z_0\), integrate the learned ODE to its endpoint \(z_1\), and retrain on the fixed pairs \((z_0,z_1)\). Those pairs come from non-crossing trajectories, so the new conditional paths cross far less and the retrained flow is much straighter; Liu et al. show that repeated reflow drives straightness toward zero, not that one round reaches it. Liu et al. measure straightness as</p>
+<p>\[ S = \int_0^1 \mathbb E\,\big\|(Z_1 - Z_0) - v(Z_t,t)\big\|^2\,dt \qquad (S = 0 \text{ means perfectly straight}). \]</p>
+<pre><code>z0 = torch.randn(60_000, 2)
+z1 = ODESolver(velocity_model=m1).sample(x_init=z0, step_size=1/128, method=&quot;midpoint&quot;)
+# warm-start m2 from m1; train with the same CFM loss on the fixed pairs (z0[i], z1[i])
+</code></pre>
+<p>Measured on two moons (<code>scripts/check_readme_claims.py</code>, seed 0): sliced \(W_2\) to the data, lower is better; two fresh data samples differ by 0.007.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Model</th><th>1 step</th><th>2</th><th>4</th><th>8</th><th>64 steps</th><th>Straightness</th></tr></thead>
+<tbody>
+<tr><td>vanilla flow matching</td><td>0.626</td><td>0.368</td><td>0.184</td><td>0.109</td><td>0.049</td><td>0.314</td></tr>
+<tr><td>after one reflow</td><td><strong>0.046</strong></td><td>0.045</td><td>0.045</td><td>0.047</td><td>0.044</td><td>0.0001</td></tr>
+</tbody></table></div>
+<p>One reflow step matches 64 vanilla steps: a 64× cut in network evaluations at equal quality on this toy.</p>
+<p>Production systems use stronger relatives of the same idea:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Idea</th>
+<th>Where it appears</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reflow</td>
+<td>retrain on the model's own deterministic coupling</td>
+<td>this repository: 1-step reflow ≈ 64-step vanilla on two moons (section 6)</td>
+</tr>
+<tr>
+<td>One-step knowledge distillation</td>
+<td>a student regresses the teacher's full-sampler output from the same noise</td>
+<td>AlphaFlow: 10 → 1 network calls (repository defaults)</td>
+</tr>
+<tr>
+<td>rCM</td>
+<td>continuous-time consistency distillation plus a distribution-matching regulariser</td>
+<td>Cosmos-Predict2.5-2B, 4 steps: PAI-Bench text-to-world overall 0.768 → 0.764; image-to-world overall 0.810 → 0.816</td>
+</tr>
+<tr>
+<td>DMD2</td>
+<td>student + "fake-score" critic + distribution-matching gradient; several critic updates per student update</td>
+<td>Cosmos 3 repo and the Cosmos Cookbook: 4-step students with guidance baked in</td>
+</tr>
+<tr>
+<td>Shortcut models, MeanFlow</td>
+<td>learn the average velocity over an interval and jump directly</td>
+<td>research alternatives (arXiv 2410.12557, 2505.13447)</td>
+</tr>
+</tbody>
+</table></div>
+<p>NVIDIA reports its 4-step DMD2 students as "17–25x faster". One plausible reading: 35–50 teacher steps × 2 passes for classifier-free guidance = 70–100 network evaluations, against 4 for the distilled student.</p>
+<h2 id="knobs">7 · Training knobs at scale</h2>
+<h3 id="where-to-put-the-training-times">Where to put the training times</h3>
+<p>Uniform \(t\) spends capacity on trivially easy and hopeless noise levels. Stable Diffusion 3 and Cosmos-Predict2.5 sample a <strong>logit-normal</strong>, \(t = \operatorname{sigmoid}(n)\) with \(n\sim\mathcal N(m,s^2)\). Meta's image example has a "skewed timesteps" option that is the same thing biased toward the data end. Cosmos 3 draws the noise level independently for each modality: logit-normal for image, audio and action batches, and "mode sampling" for video.</p>
+<p>Intuitively, <em>which</em> outcome happens is settled at high noise and the fine detail at low noise, so the time distribution decides where the model spends its capacity.</p>
+<h3 id="the-resolution-shift">The resolution shift</h3>
+<p>At high resolution, neighbouring pixels are redundant, so a given amount of noise destroys less structure. Cosmos shifts the noise level up with resolution. In the Cosmos convention (\(t=1\) is noise):</p>
+<p>\[ t_s = \frac{\beta t}{1+(\beta-1)t} \quad\Longleftrightarrow\quad \frac{t_s}{1-t_s} = \beta\,\frac{t}{1-t}, \]</p>
+<p>so the shift multiplies the standard-deviation noise-to-signal ratio \(t/(1-t)\) by \(\beta\). The standard-deviation signal-to-noise ratio is divided by \(\beta\); the variance signal-to-noise ratio \(\alpha^2/\sigma^2\) is divided by \(\beta^2\), which is the \(-2\log\beta\) move in SD3's log-SNR. The 4-step schedule of Cosmos 3's distilled students, <code>t_list = [1.0, 0.9375, 0.8333, 0.625]</code>, is exactly this shift with \(\beta = 5\) applied to the uniform grid \([1, 0.75, 0.5, 0.25]\).</p>
+<figure class="widget" id="w-shift"><figcaption><strong>Resolution shift explorer.</strong> Cosmos time, 1 = pure noise. Left: the mapping and the 4-step grid. Right: where logit-normal(0, 1) training times land after the shift.</figcaption>
+<div class="wctl"><label>shift β <input type="range" id="shift-b" min="1" max="10" step="0.5" value="5"> <output id="shift-out">5</output></label> <span id="shift-grid" class="mono"></span></div>
+<svg id="shift-svg" viewBox="0 0 640 280" role="img" aria-label="Shift mapping and histogram of shifted training times"></svg></figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Where</th>
+<th>256p</th>
+<th>480p</th>
+<th>720p</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Cosmos-Predict2.5 training</td>
+<td>β = 1</td>
+<td>—</td>
+<td>β = 5</td>
+</tr>
+<tr>
+<td>Cosmos 3 pre-training</td>
+<td>1</td>
+<td>3</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Cosmos 3 mid-training / repo <code>rectified_flow_shift</code></td>
+<td>3</td>
+<td>5</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Cosmos 3 inference defaults</td>
+<td>shift 10 (video), 3 (text-to-image), 5 (image-to-video, actions, policy)</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p>One more trick from Predict2.5: drawing 5% of training samples from the highest 2% of the noise distribution sharply reduced abrupt frame transitions. Temporal coherence is decided at high noise.</p>
+<h3 id="loss-masking-and-weighting">Loss, masking and weighting</h3>
+<p>Cosmos uses velocity MSE with no time-dependent weighting. Conditioning tokens (clean context frames, given actions) are masked out of the loss. Cosmos 3 sums per-modality losses with modality-specific scales and multiplies the action loss by 10 "to compensate for the smaller per-element MSE of normalized action vectors."</p>
+<h3 id="classifier-free-guidance">Classifier-free guidance</h3>
+<p>Drop the condition about 10% of the time during training; at sampling time, extrapolate from the unconditional toward the conditional velocity:</p>
+<p>\[ \tilde v = v_\varnothing + w\,(v_c - v_\varnothing). \]</p>
+<p>Guidance doubles the cost per step. Cosmos 3 uses \(w=6\) for video, \(w=3\) for its policy, a two-weight variant for control videos (text 3, control 1.5), and <strong>\(w = 1\) (no guidance) for forward and inverse dynamics</strong>. Our reading of why: guidance amplifies the condition, and a simulator should reproduce it, not amplify it. Meta's image example writes the same formula as \((1+w')v_c - w'v_\varnothing\), so its default <code>cfg_scale = 0.2</code> means \(w = 1.2\).</p>
+<h2 id="beyond">8 · Beyond pixels</h2>
+<h3 id="curved-spaces-riemannian-flow-matching">Curved spaces: Riemannian flow matching</h3>
+<p>Rotations, poses and angles live on manifolds. Riemannian flow matching replaces the straight line by a geodesic. In this guide's clock that curve is \(x_t = \exp_{x_0}(t\,\log_{x_0} x_1)\), the same path as Chen and Lipman's \(x_t = \exp_{x_1}((1-t)\,\log_{x_1} x_0)\). Sampling uses a projection step, \(x \leftarrow \operatorname{proj}\big(x + h\,\operatorname{proj}_{T_x}(v)\big)\). Meta's library ships sphere and flat-torus manifolds. Cosmos 3 does not put poses on that manifold solver. Each ego or effector pose is a 9-D relative SE(3) delta: 3-D translation plus a 6-D rotation (the first two columns of the rotation matrix), mapped back to SO(3) by an SVD. Figure 3 of the Cosmos 3 report gives the full vector lengths: an autonomous vehicle is 9D, a single arm is 10D, a humanoid is 29D, and an egocentric human is 57D. A camera or vehicle is the 9D pose alone. A simple gripper adds one dimension. A five-finger hand can be 15D of fingertip positions.</p>
+<h3 id="tokens-discrete-flow-matching">Tokens: discrete flow matching</h3>
+<p>For tokenised data, each token follows a mixture path \(p_t(x^i\mid x_0,x_1) = (1-\kappa_t)\,\delta_{x_0^i} + \kappa_t\,\delta_{x_1^i}\); the network predicts a distribution over clean tokens, trained with cross-entropy or a generalised KL; sampling is a continuous-time Markov chain that jumps tokens from the source (a mask token or uniform noise; Meta's text example defaults to uniform) toward predicted values. This is the flow-matching view of masked token models, relevant to tokenised world models.</p>
+<h3 id="structure-and-symmetry-alphaflow">Structure and symmetry: AlphaFlow</h3>
+<p>AlphaFlow (Jing, Berger, Jaakkola, 2024) turns AlphaFold into a generator of protein conformational ensembles, a learned surrogate for molecular dynamics. Its choices generalise: a <strong>structured prior</strong> (a Gaussian polymer chain instead of isotropic noise), a <strong>symmetry-aware coupling</strong> (each noise sample is RMSD-aligned to its data sample, which shortens paths), <strong>invariant inputs</strong> (the noisy structure enters only as a distance map, through a zero-initialised adapter so training starts at the pretrained model), x-prediction with a geometric loss, and <strong>1-step distillation</strong>. On molecular-dynamics ensembles it is judged by distributional statistics — root-mean Wasserstein distance over atoms, RMSF fluctuation profiles, principal-component overlap — not by per-sample error (the paper scores PDB ensembles by lDDT precision, recall and diversity). That is the right way to judge any world model.</p>
+<h3 id="actions-flow-matching-policies">Actions: flow-matching policies</h3>
+<p>Robot policies use the same machinery over action chunks. GR00T N1 (<code>NVIDIA/Isaac-GR00T</code>) and π0 (<code>openpi</code>) both generate action chunks with flow-matching heads; see their papers for time sampling and step counts. In the GR00T talk: "The actions just look like an image to us… like any continuous vectors."</p>
+<h2 id="conventions">9 · Conventions cheat sheet</h2>
+<p>The most common bug when moving between codebases is the direction of time. Convert in exactly one place.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Noise at</th>
+<th>Interpolant</th>
+<th>Target</th>
+<th>Integrate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Meta <code>flow_matching</code>, Lipman et al., this guide, GR00T</td>
+<td>\(t=0\)</td>
+<td>\(t x_1 + (1-t)x_0\)</td>
+<td>\(x_1 - x_0\)</td>
+<td>0 → 1</td>
+</tr>
+<tr>
+<td>Cosmos-Predict2.5, Cosmos 3, SD3</td>
+<td>\(t=1\)</td>
+<td>\((1-t)x + t\varepsilon\)</td>
+<td>\(\varepsilon - x\)</td>
+<td>1 → 0</td>
+</tr>
+<tr>
+<td>openpi (π0), LeRobot pi0 / SmolVLA</td>
+<td>\(t=1\)</td>
+<td>\(t\,\text{noise} + (1-t)\,\text{actions}\)</td>
+<td>noise − actions</td>
+<td>1 → 0</td>
+</tr>
+<tr>
+<td>AlphaFlow paper</td>
+<td>\(t=0\) (harmonic prior)</td>
+<td>\((1-t)x_0 + t\,x_1\)</td>
+<td>clean structure; step \((\hat x - x_t)/(1-t)\)</td>
+<td>0 → 1</td>
+</tr>
+<tr>
+<td>AlphaFlow code</td>
+<td>\(t=1\)</td>
+<td>\((1-t)\,\text{data} + t\,\text{noise}\)</td>
+<td>step \((x_t - \hat x)/t\)</td>
+<td>1 → 0</td>
+</tr>
+<tr>
+<td>EDM / Cosmos-Predict1</td>
+<td>\(\sigma_{\max}\)</td>
+<td>\(x + \sigma\varepsilon\)</td>
+<td>denoiser \(D(x_\sigma,\sigma)\)</td>
+<td>\(\sigma_{\max}\) → 0</td>
+</tr>
+</tbody>
+</table></div>
+<p>Rules: \(t_{\text{Meta}} = 1 - t_{\text{Cosmos}}\); \(u_{\text{Meta}} = -v_{\text{Cosmos}}\); \(\sigma_{\text{EDM}} = (1-t)/t\) in Meta time and \(t/(1-t)\) in Cosmos time. The openpi row is the repository: the π0 paper uses noise at \(\tau=0\) and target \(\text{actions}-\varepsilon\). GR00T's N1 code matches the Meta row. Equation (1) of the GR00T paper prints the target as \(\varepsilon - A\), the wrong sign for the interpolant in that same equation.</p>
+<p>Part II</p>
+<h2 id="world-models">World models</h2>
+<p>What a world model is, how the Cosmos stack builds one with flow matching, and how such a model is conditioned, used and judged.</p>
+<h2 id="worldmodel">10 · What a world model is</h2>
+<p>NVIDIA's working definition (Cosmos introduction talk): given the video observed so far \(x_{0:t}\) and a control signal \(c\) — text, a camera pose, an ego trajectory, robot actions, a rendered simulation — predict the future,</p>
+<p>\[ p_\theta\big(x_{t+1:T}\,\big|\,x_{0:t},\,c\big). \]</p>
+<p>The world model is "the digital twin of the world"; the policy is "the digital twin of the robot". Futures are multimodal — a ball can bounce left or right, a pedestrian can stop or cross — so the model has to be <strong>generative</strong>. A model trained with mean squared error returns the conditional mean, and the mean of two futures is often impossible.</p>
+<p>A ball that can bounce left or right is predicted by a regression model to go straight down. Section 5 shows that one step of an undistilled flow returns that same mean, and section 6 shows reflow fixing it.</p>
+<h3 id="what-world-models-are-for">What world models are for</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Use</th>
+<th>What it means</th>
+<th>Where it shows up</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Synthetic data</td>
+<td>photoreal variants of sim and real data; rare events you cannot stage</td>
+<td>Cosmos Transfer and Predict; smart-city SDG ("50–75% less real data")</td>
+</tr>
+<tr>
+<td>Action-conditioned rollout</td>
+<td>frames + actions → future frames: the simulator proper</td>
+<td>Predict2.5 action-conditioned model; Cosmos 3 forward dynamics</td>
+</tr>
+<tr>
+<td>Policy evaluation</td>
+<td>"from the 1,000 checkpoints you find the best 10"</td>
+<td>Cosmos surgical-simulator recipe</td>
+</tr>
+<tr>
+<td>Planning</td>
+<td>imagine futures for candidate actions, pick the best (MPC)</td>
+<td>Cosmos introduction talk</td>
+</tr>
+<tr>
+<td>Neural trajectories</td>
+<td>dream new tasks, recover actions, train a policy</td>
+<td>DreamGen / GR00T-Dreams</td>
+</tr>
+<tr>
+<td>Policy itself</td>
+<td>denoise actions jointly with video</td>
+<td>Cosmos 3 policy mode</td>
+</tr>
+<tr>
+<td>Critic</td>
+<td>reject hallucinated generations</td>
+<td>Cosmos Reason; best-of-N</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="cosmos">11 · The Cosmos stack: from EDM to rectified flow</h2>
+<p>NVIDIA's March 2025 talks described Cosmos as a diffusion transformer trained to remove noise from corrupted video tokens. Eight months later, Cosmos-Predict2.5 adopted flow matching; by Cosmos 3 (June 2026), one rectified-flow objective covered video, audio and robot actions.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>Cosmos-Predict1</th>
+<th>Cosmos-Predict2.5</th>
+<th>Cosmos 3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Objective</td>
+<td>EDM denoising</td>
+<td>flow matching, \(v = \varepsilon - x\), logit-normal \(t\), resolution shift</td>
+<td>rectified flow over video, audio and actions; masked MSE; per-modality noise</td>
+</tr>
+<tr>
+<td>Backbone</td>
+<td>diffusion transformer, plus separate autoregressive models (see the Cosmos platform paper)</td>
+<td>DiT 2B (32 layers, width 2048) / 14B (36, 5120); relative 3D RoPE, absolute embeddings removed; AdaLN-LoRA</td>
+<td>Mixture-of-Transformers: autoregressive reasoner tower + flow generator tower with shared attention; Edge 4B / Nano 16B / Super 64B total, on dense 2B / 8B / 32B backbones</td>
+</tr>
+<tr>
+<td>Latents</td>
+<td>Cosmos tokenizer (see the Cosmos platform paper)</td>
+<td>Wan2.1 VAE 4×8×8, then 1×2×2 patchification; 93 frames → 24 latent frames</td>
+<td>Wan2.2 VAE, 4× time and 32×32 effective space; audio 25 tokens/s</td>
+</tr>
+<tr>
+<td>Text</td>
+<td>T5</td>
+<td>Cosmos-Reason1 features via cross-attention</td>
+<td>the reasoner tower itself (its keys/values are reused across all denoising steps)</td>
+</tr>
+<tr>
+<td>Data</td>
+<td>20M hours of video</td>
+<td>35M hours raw → &gt;6B clips → ~200M clips (≈4% of clips kept)</td>
+<td>767M images + 347.7M clips; 8.4M action episodes</td>
+</tr>
+<tr>
+<td>Post-training</td>
+<td>—</td>
+<td>domain fine-tunes, model soup, GRPO reinforcement learning</td>
+<td>task fine-tunes, policy post-training</td>
+</tr>
+<tr>
+<td>Few-step</td>
+<td>—</td>
+<td>rCM → 4 steps</td>
+<td>DMD2 → 4 steps, guidance baked in</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="cosmos-3s-shared-attention">Cosmos 3's shared attention</h3>
+<p>Cosmos 3 runs two parameter towers through every layer. Reasoner tokens (text, images seen through a vision encoder) use causal attention among themselves and never see the noisy tokens. Generator tokens (noisy video, audio and action latents) attend to everything. Because the reasoner side never sees noisy inputs, its keys and values are computed once per sample and reused at every denoising step.</p>
+<p>Token layouts make the jobs explicit: text-to-video is \([S_{\text{AR}}, \tilde v_{1:N}, \tilde s]\); video-to-video conditions on \(P\) clean frames, \([S_{\text{AR}}, v_{1:P}, \tilde v_{P+1:N}]\) (a tilde marks noisy tokens). Sampling defaults: 35–50 UniPC steps with guidance 6 and shift 10 for video; guidance 1 for forward and inverse dynamics; 4 steps with guidance 3 for the DROID policy in the paper's evaluation. Headline results for Cosmos3-Super include PAI-Bench-G 80.0 / 82.8 (text / image to video). Physics-IQ image-to-video is 43.8, rising to 48.9 with WMReward best-of-N. Video-to-video is 59.7, rising to 63.4 on the same protocol.</p>
+<h2 id="conditioning">12 · Conditioning a world model</h2>
+<p>The generative core is generic. What makes it a <em>world</em> model is what it is conditioned on and how.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>Mechanism</th>
+<th>Evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Past frames</td>
+<td>clean latents replace the first frames, a binary mask marks them, the loss skips them</td>
+<td>Predict2.5</td>
+</tr>
+<tr>
+<td>Robot actions</td>
+<td>an MLP of the action added to the timestep embedding</td>
+<td>Predict2.5 Table 20: PSNR 24.95 / FVD 146, vs cross-attention 24.41 / 159 and channel concatenation 23.11 / 267</td>
+</tr>
+<tr>
+<td>Actions as tokens</td>
+<td>actions are their own modality with an independently drawn noise level; clean or noisy depending on the mode</td>
+<td>Cosmos 3</td>
+</tr>
+<tr>
+<td>Camera</td>
+<td>Plücker ray maps, patchified, added before self-attention</td>
+<td>Predict2.5 camera control</td>
+</tr>
+<tr>
+<td>Dense controls</td>
+<td>ControlNet branches (Transfer 1 / 2.5) → in-context control tokens sharing time positions (Cosmos 3)</td>
+<td>Transfer recipes; Cosmos 3 transfer specs</td>
+</tr>
+<tr>
+<td>Multiple cameras</td>
+<td>views concatenated along latent time with per-view embeddings</td>
+<td>Predict2.5 AV multiview (7 views)</td>
+</tr>
+<tr>
+<td>Long horizons</td>
+<td>chunked autoregression: the last generated frames become the next context</td>
+<td>RNDS drift metric (Predict2.5 paper, reported on Transfer2.5); Cosmos surgical recipe</td>
+</tr>
+</tbody>
+</table></div>
+<p>The action result rewards a moment's thought. Adding the action to the time embedding lets it modulate every layer through adaptive layer norm, the same pathway that tells the network how noisy its input is. Cross-attention is more expressive but makes following the action one more thing the network has to learn to attend to.</p>
+<h2 id="roles">13 · One model, many jobs: token roles</h2>
+<p>Cosmos 3's most useful idea for practitioners: every token is either <strong>clean</strong> (given) or <strong>noisy</strong> (to be generated), and the choice of which tokens are noisy defines the task. A third role, <strong>dropped</strong>, covers absent inputs and classifier-free guidance. Try the presets on an example token layout:</p>
+<figure class="widget" id="w-roles"><figcaption><strong>Token roles.</strong> One chunk: caption, instruction, context frame \(F_0\), five future frames, five actions. Presets are illustrative.</figcaption>
+<div class="wctl" id="roles-btns"></div>
+<div id="roles-row" class="roles-row"></div>
+<p class="legend"><span class="chip clean">clean</span> given, \(t=1\), no loss &nbsp; <span class="chip noisy">noisy</span> generated, loss &nbsp; <span class="chip dropped">dropped</span> null embedding</p>
+<p id="roles-note" class="note"></p></figure>
+<p>Training mixes the presets per example. Cosmos 3 reports that joint training cut inverse-dynamics error by 72% on PushT. Implementation detail: Meta's <code>ProbPath.sample</code> takes one time per <em>sample</em>, but roles need one time per <em>token</em> (clean tokens at \(t=1\), each modality with its own \(t\)), so the interpolation is applied with the scheduler coefficients directly:</p>
+<pre><code>from flow_matching.path.scheduler import CondOTScheduler
+
+def interpolate(x1, x0, t_tok, sched=CondOTScheduler()):
+    &quot;&quot;&quot;x1, x0: (B, N, ...); t_tok: (B, N) one flow time per token.&quot;&quot;&quot;
+    s = sched(t_tok)
+    shape = t_tok.shape + (1,) * (x1.ndim - t_tok.ndim)
+    a, sg = s.alpha_t.reshape(shape), s.sigma_t.reshape(shape)
+    da, dsg = s.d_alpha_t.reshape(shape), s.d_sigma_t.reshape(shape)
+    return a * x1 + sg * x0, da * x1 + dsg * x0      # x_t and its velocity target
+
+t = torch.where(role == CLEAN, torch.ones_like(t_sampled), t_sampled)
+x_t, target = interpolate(x1, torch.randn_like(x1), t)
+loss = ((model(x_t, t, roles) - target) ** 2 * (role == NOISY)).sum() / (role == NOISY).sum()
+</code></pre>
+<p>This function is tested to match <code>CondOTProbPath.sample</code> exactly when all tokens share one time (checked by <code>scripts/check_readme_claims.py</code>).</p>
+<h2 id="using">14 · Using and judging world models</h2>
+<h3 id="four-ways-to-use-one">Four ways to use one</h3>
+<ul>
+<li><strong>Evaluate policies.</strong> Run each candidate policy closed loop inside the world model and rank them. Cosmos-Surg-dVRK reports a strong correlation between simulated and real success.</li>
+<li><strong>Plan.</strong> Imagine the outcome of candidate action sequences and execute the best first action (model-predictive control). Planning makes latency the bottleneck, which is why distillation matters.</li>
+<li><strong>Make data.</strong> Cosmos-Transfer2.5 augmentation raised a 100-demonstration diffusion policy to 24/30 successes, against 5/30 with standard image augmentation and 1/30 with none.</li>
+<li><strong>Dream trajectories.</strong> DreamGen / GR00T-Dreams: adapt the video world model to a robot, prompt it with new instructions, recover pseudo-actions with a latent-action or inverse-dynamics model, and train a policy on the "neural trajectories".</li>
+</ul>
+<h3 id="how-to-judge-one">How to judge one</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Axis</th>
+<th>Metrics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Visual quality</td>
+<td>VBench dimensions, DOVER, FVD / FID (PAI-Bench-G)</td>
+</tr>
+<tr>
+<td>Physics</td>
+<td>Physics-IQ (motion masks against real outcomes), VideoPhy-2 plausibility</td>
+</tr>
+<tr>
+<td>Control fidelity</td>
+<td>PAI-Bench-C: edge F1, SSIM, depth error, segmentation mIoU</td>
+</tr>
+<tr>
+<td>Action following</td>
+<td>action-conditioned PSNR / FVD; camera pose errors; inverse-dynamics cycle error</td>
+</tr>
+<tr>
+<td>Long horizons</td>
+<td>RNDS (quality relative to ground truth, normalised to the first chunk)</td>
+</tr>
+<tr>
+<td>Usefulness</td>
+<td>success of policies trained or ranked with the model</td>
+</tr>
+<tr>
+<td>Distributional fidelity</td>
+<td>Wasserstein distances to the simulator under identical actions; per-atom \(W_2\) and principal-component overlap (AlphaFlow)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="what-still-breaks">What still breaks</h3>
+<blockquote>
+<p>About 10, 15% of the times we generate, we're gonna see a hallucination.<br><span class="attr">— Sanja Fidler, NVIDIA, Cosmos for autonomous driving (GTC 2025, ~26:06)</span></p>
+<p>We're really thinking of this model as being a renderer. It's not very smart.<br><span class="attr">— same talk, ~27:09</span></p>
+</blockquote>
+<p>Traffic lights that are red and green at once, cars that move on red, drift across autoregressive chunks, and latency (the 2025 models were too slow for closed-loop use) are the open problems practitioners name. The remedies in the stack are the ones this guide covers: critics and best-of-N, post-training, distillation, and better conditioning.</p>
+<p>Part III</p>
+<h2 id="run-it">Run it</h2>
+<p>Everything this guide measures runs on a CPU without downloading datasets or weights.</p>
+<h2 id="reproduce">15 · Reproduce the numbers</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Script</th><th>What it shows</th><th>Result on seed 0</th></tr></thead>
+<tbody>
+<tr><td><code>scripts/check_readme_claims.py</code></td><td>every measured number and code claim in this guide</td><td>token-role <code>interpolate</code> equals <code>CondOTProbPath.sample</code>; closed-form velocity −0.114 vs Monte Carlo −0.117; the step-count table in section 6</td></tr>
+<tr><td><code>scripts/minimal_flow_matching.py</code></td><td>flow matching and one reflow round on two moons</td><td>loss 1.190 → 1.034 (it cannot reach zero: the labels conflict); straightness 0.314 → 0.0001</td></tr>
+<tr><td><code>scripts/make_hero_figure.py</code></td><td>the three-panel two-moons figure</td><td><code>figures/two_moons_reflow.png</code></td></tr>
+<tr><td><code>scripts/alphaflow_prior_demo.py</code></td><td>AlphaFlow's harmonic prior and Kabsch alignment</td><td>neighbour spacing 3.35 Å vs 2.11 Å for white noise; alignment error 0.000002 Å</td></tr>
+</tbody></table></div>
+<pre><code>pip install torch numpy matplotlib torchdiffeq
+python scripts/check_readme_claims.py      # ~20 s
+python scripts/alphaflow_prior_demo.py
+</code></pre>
+<p><strong>Not included:</strong> no world model, video model or robot policy was trained for this project. The Cosmos, GR00T and π0 numbers in Part II are quoted from the cited papers and repositories.</p>
+<h2 id="lessons">16 · Takeaways and checklist</h2>
+<h3 id="takeaways">Takeaways</h3>
+<ol>
+<li><strong>One undistilled step is the regression mean.</strong> Measured here: sliced \(W_2\) 0.626 at one step vs 0.049 at 64.</li>
+<li><strong>Straighten before you cut steps.</strong> One reflow round made a single step as good as 64 (0.046 vs 0.049).</li>
+<li><strong>The training loss is not a quality signal.</strong> Vanilla loss stays near 1.03 because the labels conflict by design.</li>
+<li><strong>Check the clock.</strong> Meta, Cosmos, openpi and AlphaFlow disagree on which end is noise (section 9).</li>
+<li><strong>Guidance amplifies the condition.</strong> Cosmos 3 runs its forward and inverse dynamics at \(w = 1\).</li>
+<li><strong>Token roles turn one model into many jobs.</strong> Which tokens are noisy selects simulator, labeller or policy (section 13).</li>
+</ol>
+<h3 id="implementation-checklist">Implementation checklist</h3>
+<ul>
+<li>Check the time convention and the sign of the target in every codebase you read (section 9).</li>
+<li><code>ODESolver</code> passes a 0-dimensional <code>t</code> to your model; training passes shape <code>(B,)</code> or per-token <code>(B, N)</code>. Broadcast inside the model.</li>
+<li><code>AffineProbPath</code>'s conversion functions expect <code>t</code> already broadcastable to <code>x_t</code>; \(\hat x_1\)→velocity divides by \(\sigma_t\) and is singular at \(t=1\), which Euler and midpoint never evaluate but RK4 does; \(\hat\varepsilon\)→velocity divides by \(\alpha_t\) and is singular at \(t=0\), which every solver evaluates on its first step.</li>
+<li>Guidance doubles the cost per step; distilled checkpoints already contain it, so run them at guidance 1.</li>
+<li>The shift is tied to resolution and training stage; re-tune it when the latent size changes.</li>
+<li>Exact divergence in <code>compute_likelihood</code> only works for flat <code>(B, D)</code> inputs; use the Hutchinson estimator otherwise.</li>
+<li>Meta's <code>flow_matching</code> is CC BY-NC 4.0: depend on it, do not copy it into code with another licence.</li>
+</ul>
+<h2 id="refs">References</h2>
+<ol>
+<li>Lipman, Chen, Ben-Hamu, Nickel, Le. <em>Flow Matching for Generative Modeling</em>. ICLR 2023. arXiv 2210.02747.</li>
+<li>Liu, Gong, Liu. <em>Flow Straight and Fast: Learning to Generate and Transfer Data with Rectified Flow</em>. ICLR 2023. arXiv 2209.03003.</li>
+<li>Albergo, Vanden-Eijnden. <em>Building Normalizing Flows with Stochastic Interpolants</em>. ICLR 2023. arXiv 2209.15571.</li>
+<li>Lipman et al. <em>Flow Matching Guide and Code</em>. 2024. arXiv 2412.06264; <a href="https://github.com/facebookresearch/flow_matching">facebookresearch/flow_matching</a>.</li>
+<li>Esser et al. <em>Scaling Rectified Flow Transformers for High-Resolution Image Synthesis</em> (SD3). 2024. arXiv 2403.03206.</li>
+<li>Tong et al. <em>Improving and Generalizing Flow-Based Generative Models with Minibatch Optimal Transport</em>. 2023. arXiv 2302.00482.</li>
+<li>Chen, Lipman. <em>Riemannian Flow Matching on General Geometries</em>. 2023. arXiv 2302.03660.</li>
+<li>Gat et al. <em>Discrete Flow Matching</em>. 2024. arXiv 2407.15595.</li>
+<li>Karras et al. <em>Elucidating the Design Space of Diffusion-Based Generative Models</em> (EDM). 2022. arXiv 2206.00364.</li>
+<li>Ho, Salimans. <em>Classifier-Free Diffusion Guidance</em>. 2022. arXiv 2207.12598.</li>
+<li>NVIDIA. <em>Cosmos World Foundation Model Platform for Physical AI</em>. 2025. arXiv 2501.03575.</li>
+<li>NVIDIA. <em>World Simulation with Video Foundation Models for Physical AI</em> (Cosmos-Predict2.5). arXiv 2511.00062.</li>
+<li>NVIDIA. <em>Cosmos 3: Omnimodal World Models for Physical AI</em>. arXiv 2606.02800, 22 June 2026.</li>
+<li>NVIDIA. <em>Cosmos Cookbook</em>. <a href="https://github.com/nvidia-cosmos/cosmos-cookbook">nvidia-cosmos/cosmos-cookbook</a>.</li>
+<li>Yin et al. <em>Improved Distribution Matching Distillation for Fast Image Synthesis</em> (DMD2). 2024. arXiv 2405.14867.</li>
+<li>NVIDIA. <em>Large Scale Diffusion Distillation via Score-Regularized Continuous-Time Consistency</em> (rCM). 2025. arXiv 2510.08431.</li>
+<li>Frans et al. <em>One Step Diffusion via Shortcut Models</em>. arXiv 2410.12557. Geng et al. <em>Mean Flows for One-step Generative Modeling</em>. arXiv 2505.13447.</li>
+<li>Chen et al. <em>Diffusion Forcing</em>. 2024. arXiv 2407.01392.</li>
+<li>NVIDIA. <em>GR00T N1: An Open Foundation Model for Generalist Humanoid Robots</em>. 2025. arXiv 2503.14734.</li>
+<li>Black et al. <em>π0: A Vision-Language-Action Flow Model for General Robot Control</em>. 2024. arXiv 2410.24164.</li>
+<li>NVIDIA GEAR. <em>DreamGen: Unlocking Generalization in Robot Learning through Video World Models</em>. 2025. arXiv 2505.12705.</li>
+<li>Jing, Berger, Jaakkola. <em>AlphaFold Meets Flow Matching for Generating Protein Ensembles</em>. ICML 2024. arXiv 2402.04845.</li>
+<li>diffusion.fyi. <em>Flow Matching</em> interactive tutorial and the companion video "The physics behind Flow Matching models".</li>
+</ol>
+<h2 id="glossary">Glossary</h2>
+<p>CondOT path</p>
+<p>The straight-line interpolation \(x_t = t x_1 + (1-t)x_0\); the conditional optimal-transport path between noise and a single data point.</p>
+<p>Marginal velocity</p>
+<p>The field that moves the whole noise distribution to the data distribution; the posterior average of conditional velocities.</p>
+<p>NFE</p>
+<p>Number of function evaluations: forward passes of the network during sampling. Guidance doubles it per step.</p>
+<p>Reflow</p>
+<p>Retraining a flow on its own noise → sample pairs to straighten its paths.</p>
+<p>Straightness</p>
+<p>\(\int \mathbb E\|(Z_1-Z_0) - v(Z_t,t)\|^2dt\); zero for straight trajectories.</p>
+<p>Logit-normal</p>
+<p>\(t = \operatorname{sigmoid}(n)\), \(n\sim\mathcal N(m,s^2)\); concentrates training times in the middle (or toward one end if \(m\neq0\)).</p>
+<p>Shift β</p>
+<p>Re-mapping of the noise level that multiplies the standard-deviation noise-to-signal ratio \(t/(1-t)\) by β, and the variance ratio by β². Larger β is used at higher resolution.</p>
+<p>CFG</p>
+<p>Classifier-free guidance: \(v_\varnothing + w(v_c - v_\varnothing)\), trained by randomly dropping the condition.</p>
+<p>Token role</p>
+<p>Clean (given), noisy (generated) or dropped (absent); selects the task of a token-based world model.</p>
+<p>Forward dynamics</p>
+<p>Predicting future observations from current ones and actions: the simulator.</p>
+<p>Inverse dynamics</p>
+<p>Recovering the actions that explain an observed trajectory.</p>
+<p>Video2World</p>
+<p>Continuing a video from a few context frames, optionally given text.</p>
+<p>Best-of-N</p>
+<p>Sampling N candidates and keeping the one a critic scores highest.</p>
+<p>Sliced \(W_2\)</p>
+<p>Average one-dimensional Wasserstein-2 distance over random projections; used here to compare samples with data.</p>
+<p>rCM, DMD2</p>
+<p>Distillation methods used by Cosmos to reach 4 sampling steps.</p>
+<p>Plücker rays</p>
+<p>A 6-D per-pixel encoding of camera rays used to condition on camera pose.</p>
+<p>Written from the Cosmos-Predict2.5 paper, the Cosmos 3 technical report and repository, the Cosmos Cookbook and NVIDIA GTC talks (see References; none of this material is in the repository), plus Meta's <code>flow_matching</code> library and AlphaFlow, both included in <a href="https://github.com/Pankaj-Leo/Flow_Matching">Pankaj-Leo/Flow_Matching</a>. Measured numbers come from the scripts in the repository. The project uses Meta's <code>flow_matching</code> (CC BY-NC 4.0) as a dependency and is non-commercial.</p>
+</main>
+<script>
+(function(){
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+// seeded RNG + normal
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function normals(n,seed){const r=rng(seed),out=[];while(out.length<n){const u=r()||1e-9,v=r();out.push(Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v));}return out;}
+
+// ---- widget 1: one-step trap ----
+(function(){
+ const svg=document.getElementById("trap-svg"); if(!svg) return;
+ const mu=[-3,0.5,3], pi=[0.45,0.20,0.35];
+ function v(x,t){ // exact marginal velocity, Meta time (0 noise, 1 data)
+   const s=1-t; let lw=mu.map((m,i)=>Math.log(pi[i])-0.5*((x-t*m)/s)**2); const mx=Math.max(...lw);
+   const w=lw.map(l=>Math.exp(l-mx)); const Z=w.reduce((a,b)=>a+b,0);
+   return w.reduce((a,wi,i)=>a+wi*(mu[i]-x),0)/Z/s; }
+ const z=normals(160,7), xr=rng(11), pairs=z.map(()=>{let u=xr(),i=u<pi[0]?0:(u<pi[0]+pi[1]?1:2);return mu[i];});
+ const X=x=>40+(x+5)/10*400, Y=t=>330-t*300;
+ const steps=[1,2,3,4,8,16,32,128];
+ function path(x0,n){const p=[[x0,0]];let x=x0;for(let k=0;k<n;k++){const t=k/n;x+=v(x,t)/n;p.push([x,(k+1)/n]);}return p;}
+ function draw(){
+   while(svg.firstChild)svg.removeChild(svg.firstChild);
+   const n=steps[+document.getElementById("trap-n").value]; document.getElementById("trap-out").textContent=n;
+   const showPairs=document.getElementById("trap-pairs").checked;
+   el("line",{x1:40,y1:330,x2:440,y2:330,stroke:"#bbb"},svg); el("line",{x1:40,y1:30,x2:440,y2:30,stroke:"#bbb"},svg);
+   el("text",{x:445,y:334,"font-size":12,fill:"#777"},svg).textContent="t = 0 noise";
+   el("text",{x:445,y:34,"font-size":12,fill:"#777"},svg).textContent="t = 1 data";
+   if(showPairs) z.forEach((x0,i)=>el("line",{x1:X(x0),y1:Y(0),x2:X(pairs[i]),y2:Y(1),stroke:"#d97706","stroke-opacity":.18},svg));
+   z.forEach(x0=>{const p=path(x0,200);el("polyline",{points:p.map(q=>X(q[0])+","+Y(q[1])).join(" "),fill:"none",stroke:"#9ca3af","stroke-opacity":.35,"stroke-width":.8},svg);});
+   const ends=[];
+   z.forEach(x0=>{const p=path(x0,n);ends.push(p[p.length-1][0]);el("polyline",{points:p.map(q=>X(q[0])+","+Y(q[1])).join(" "),fill:"none",stroke:"#7c3aed","stroke-opacity":.45,"stroke-width":1},svg);});
+   mu.forEach((m,i)=>el("circle",{cx:X(m),cy:Y(1),r:4+8*pi[i],fill:"#f59e0b"},svg));
+   // histogram of endpoints (right panel)
+   const bins=40,cnt=new Array(bins).fill(0);ends.forEach(e=>{const b=Math.floor((e+5)/10*bins);if(b>=0&&b<bins)cnt[b]++;});
+   const mxc=Math.max(...cnt,1); el("text",{x:470,y:60,"font-size":12,fill:"#555"},svg).textContent="where samples land";
+   cnt.forEach((c,b)=>{const w=150*c/mxc;el("rect",{x:470,y:70+b*6.5,width:w,height:5.5,fill:"#7c3aed","fill-opacity":.7},svg);});
+   mu.forEach(m=>el("line",{x1:466,x2:630,y1:70+(m+5)/10*bins*6.5,y2:70+(m+5)/10*bins*6.5,stroke:"#f59e0b","stroke-dasharray":"3 3"},svg));
+ }
+ document.getElementById("trap-n").addEventListener("input",draw);
+ document.getElementById("trap-pairs").addEventListener("change",draw); draw();
+})();
+
+// ---- widget 2: resolution shift ----
+(function(){
+ const svg=document.getElementById("shift-svg"); if(!svg) return;
+ const shift=(t,b)=>b*t/(1+(b-1)*t); const sig=x=>1/(1+Math.exp(-x)); const tn=normals(4000,3).map(sig);
+ function draw(){
+   while(svg.firstChild)svg.removeChild(svg.firstChild);
+   const b=+document.getElementById("shift-b").value; document.getElementById("shift-out").textContent=b;
+   const grid=[1,0.75,0.5,0.25].map(t=>shift(t,b));
+   document.getElementById("shift-grid").textContent="4-step grid → ["+grid.map(g=>g.toFixed(4)).join(", ")+"]";
+   const L={x:40,y:20,w:240,h:240};
+   el("rect",{x:L.x,y:L.y,width:L.w,height:L.h,fill:"none",stroke:"#ddd"},svg);
+   el("line",{x1:L.x,y1:L.y+L.h,x2:L.x+L.w,y2:L.y,stroke:"#ccc","stroke-dasharray":"4 4"},svg);
+   const pts=[];for(let i=0;i<=100;i++){const t=i/100;pts.push((L.x+t*L.w)+","+(L.y+L.h-shift(t,b)*L.h));}
+   el("polyline",{points:pts.join(" "),fill:"none",stroke:"#9a3412","stroke-width":2},svg);
+   [1,0.75,0.5,0.25].forEach(t=>{const s=shift(t,b);el("circle",{cx:L.x+t*L.w,cy:L.y+L.h-s*L.h,r:4,fill:"#7c3aed"},svg);});
+   el("text",{x:L.x,y:L.y+L.h+16,"font-size":11,fill:"#777"},svg).textContent="t (uniform)  →  t_s (shifted)";
+   const R={x:330,y:20,w:290,h:240},bins=30,c0=new Array(bins).fill(0),c1=new Array(bins).fill(0);
+   tn.forEach(t=>{c0[Math.min(bins-1,Math.floor(t*bins))]++;c1[Math.min(bins-1,Math.floor(shift(t,b)*bins))]++;});
+   const m=Math.max(...c0,...c1);
+   for(let i=0;i<bins;i++){const bw=R.w/bins;
+     el("rect",{x:R.x+i*bw,y:R.y+R.h-c0[i]/m*R.h,width:bw-1,height:c0[i]/m*R.h,fill:"#9ca3af","fill-opacity":.45},svg);
+     el("rect",{x:R.x+i*bw,y:R.y+R.h-c1[i]/m*R.h,width:bw-1,height:c1[i]/m*R.h,fill:"#9a3412","fill-opacity":.55},svg);}
+   el("text",{x:R.x,y:R.y+R.h+16,"font-size":11,fill:"#777"},svg).textContent="0 (data)    grey: logit-normal(0,1)   rust: after shift    1 (noise)";
+ }
+ document.getElementById("shift-b").addEventListener("input",draw); draw();
+})();
+
+// ---- widget 3: token roles ----
+(function(){
+ const row=document.getElementById("roles-row"); if(!row) return;
+ const toks=["caption","instr","F0","Δx1","Δx2","Δx3","Δx4","Δx5","u0","u1","u2","u3","u4"];
+ const P={
+  "Forward dynamics":{r:["c","c","c","n","n","n","n","n","c","c","c","c","c"],note:"Frames are generated from the context frame and the given actions: the simulator."},
+  "Inverse dynamics":{r:["c","c","c","c","c","c","c","c","n","n","n","n","n"],note:"Actions are generated to explain an observed trajectory: the action labeller."},
+  "Policy":{r:["c","c","c","n","n","n","n","n","n","n","n","n","n"],note:"Actions are denoised jointly with the imagined future, as in Cosmos 3's policy mode."},
+  "Video2World":{r:["c","c","c","n","n","n","n","n","d","d","d","d","d"],note:"The video is continued from the context with no actions given."},
+  "Unconditional (CFG)":{r:["d","d","c","n","n","n","n","n","c","c","c","c","c"],note:"Caption and instruction dropped: the unconditional branch used by classifier-free guidance."}};
+ const cls={c:"clean",n:"noisy",d:"dropped"}, btns=document.getElementById("roles-btns");
+ function show(k){row.innerHTML="";P[k].r.forEach((r,i)=>{const s=document.createElement("span");s.className="chip "+cls[r];s.textContent=toks[i];row.appendChild(s);});
+   document.getElementById("roles-note").textContent=P[k].note;
+   [...btns.children].forEach(b=>b.setAttribute("aria-pressed",b.textContent===k));}
+ Object.keys(P).forEach(k=>{const b=document.createElement("button");b.type="button";b.textContent=k;b.onclick=()=>show(k);btns.appendChild(b);});
+ show("Forward dynamics");
+})();
+})();
+</script>
+</body>
+</html>
