@@ -21,7 +21,6 @@ figures/notebooks/
 
 # Kept locally, not published (contain claims that are not backed by this repo)
 Flow_Matching_for_World_Models.corrected.md
-Flow_Matching.png
 
 # AlphaFlow run logs
 alphaflow-master/workdir/
